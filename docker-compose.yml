@@ -1,0 +1,134 @@
+      version: "3"
+      services:
+        elasticsearch:
+          image: elasticsearch:7.12.0
+          hostname: elasticsearch
+          container_name: elastic
+          volumes:
+              - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+#            - type: bind
+#              source: ./elasticsearch/config/elasticsearch.yml
+#              target: /usr/share/elasticsearch/config/elasticsearch.yml
+#              read_only: true
+#            - type: volume
+#              source: elasticsearch
+#              target: /usr/share/elasticsearch/data
+          ports:
+            - 9200:9200
+          environment: 
+            ES_JAVA_OPTS: "-Xmx456m -Xms456m"
+            ELASTIC_PASSWORD: changeme
+          networks:
+            - mi-puente
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:5601"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+      #    deploy: # LIMITAR LOS RECURSOS
+       #     resources:
+        #      limits:
+         #       cpus: 0.5 #De 2Cpus
+          #      memory: 2048M #De 7GB
+        filebeat:
+          image: store/elastic/filebeat:7.12.0
+          hostname: filebeat_host
+          container_name: filebeat
+          command: filebeat -e -strict.perms=false
+          volumes:
+            - ./filebeat/config/filebeat.yml:/usr/share/filebeat/filebeat.yml
+            - ./filebeat/logs:/var/log
+          networks:
+            - mi-puente
+#          depends_on:
+#            kibana:
+#              condition: service_healthy
+          restart: on-failure:15
+          links:
+            - kibana
+      #    deploy:
+       #     resources:
+        #      limits:
+         #       cpus: 0.25
+          #      memory: 1536M
+          user: root
+        kibana:
+          image: kibana:7.12.0
+          container_name: kibana
+          hostname: kibana
+          volumes:
+            - ./kibana/config/kibana.yml:/usr/share/kibana/kibana.yml       
+#            - type: bind
+#              source: ./kibana/config/kibana.yml
+#              target: /usr/share/kibana/kibana.yml
+#              read_only: true
+#            - type: volume
+#              source: kibana
+#              target: /usr/share/kibana/data
+          environment:
+            ELASTICSEARCH_URL: http://elasticsearch:9200
+            ELASTICSEARCH_USERNAME: elastic
+            ELASTICSEARCH_PASSWORD: changeme
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:5601"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+          ports:
+            - 5601:5601
+          networks:
+            - mi-puente
+          restart: on-failure:15
+#          depends_on:
+#            elasticsearch:
+#              condition: service_healthy #Comprueba el healthcheck de elastic
+       #   deploy:
+        #    resources:
+         #     limits:
+          #      cpus: 0.5
+           #     memory: 1036M
+        logstash:
+          image: docker.elastic.co/logstash/logstash-oss:7.12.0
+          container_name: logstash
+          hostname: logstash_host #Nombre del host
+          volumes:
+            - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml #Archivo de configuracion de logstash
+            - ./logstash/config/pipelines.yml:/usr/share/logstash/config/pipelines.yml # Archivo de configuracion de las pipelines
+            - ./logstash/config/startup.options:/usr/share/logstash/config/startup.options
+            - ./logstash/pipeline:/usr/share/logstash/pipeline # Carpetas que tendrán .conf
+            - ./logstash/patterns:/usr/share/logstash/patterns # Guardaremos los patrones
+            - ./logstash/templates:/usr/share/logstash/templates # Ruta donde guardaremos las plantillas
+            - ./logstash/logs:/usr/share/logstash/logs # Ruta para guardar los logs de muestra 
+          ports:
+            - "5044:5044"
+            - "5000:5000/tcp"
+            - "5000:5000/udp"
+            - "9600:9600"
+          environment:
+            ES_JAVA_OPTS: "-Xmx600m -Xms600m"
+          networks:
+            - mi-puente
+          depends_on:
+            filebeat:
+              condition: service_healthy
+#          command: ["logstash","-f","/usr/share/logstash/pipeline/logstash.conf"]
+          depends_on:
+            - elasticsearch
+          restart: on-failure:15 #MIRAR EL TEMA DE ONFAILURE N VECES
+          user: root
+        ##  deploy:
+         #   resources:
+          #    limits:
+           #     cpus: 0.75
+            #    memory: 2048M
+      networks:
+        mi-puente:
+          driver: bridge
+      volumes:
+        filebeat:
+          driver: local
+        elasticsearch:
+          driver: local
+        kibana:
+          driver: local
+        
